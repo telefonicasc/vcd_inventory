@@ -4,10 +4,10 @@ Este repositorio contiene un plugin de inventario de ansible, para obtener el li
 
 ## Requisitos
 
-Este plugin necesita que se instale la librería [pyvcloud](https://pypi.org/project/pyvcloud/):
+Este plugin necesita que se instale la librería [pyvcloud](https://pypi.org/project/pyvcloud/). La versión probada actualmente es la **22.0.1**:
 
 ```bash
-$ pip install pyvcloud
+$ pip install pyvcloud==22.0.1
 ```
 
 ## Uso
