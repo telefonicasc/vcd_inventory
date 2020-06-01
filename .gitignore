@@ -1,0 +1,18 @@
+# VSCode side-products
+.vscode
+*.txt
+*.log
+*.log.*
+
+# Ansible side-products
+ansible
+venv
+cache
+
+# Python side-products
+__pycache__
+Pipfile
+Pipfile.lock
+*.pyc
+*.pyo
+*.env

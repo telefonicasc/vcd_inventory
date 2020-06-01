@@ -1,0 +1,5 @@
+# Ejemplo de cómo ampliar el inventario añadiendo un atributo a todos los hosts
+# En este caso, queremos añadir el atributo ansible-user = 'cloud-user'
+plugin: constructed
+compose:
+  ansible_user: "'username'"

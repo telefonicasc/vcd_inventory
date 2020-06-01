@@ -1,0 +1,33 @@
+plugin: vcd
+
+# True to check HTTPS certiicate validity
+validate_certs: True
+
+# API version 30.0 for vCD 9.1
+api_version: "30.0"
+
+# True if the inventory should return only powered-on VMs
+only_on: false
+
+# True if we must compose host names using vApp name + VM name
+# (in case there are different VMs with the same name in different vApps)
+compose_names: false
+
+# Which NIC is the mgmt NIC (in case the VM has many)
+mgmt_nic: 0
+
+# Number of threads for collecting info from vCD
+threads: 16
+
+# True to check DNAT rules at edges for mappings of port SSH 22
+check_dnat: true
+
+# Name of log file to save pyvcloud log
+log_file: pyvcloud.log
+
+# Replace dashes with underscores in group and host names
+replace_dash: false
+
+# El módulo soporta cache. Debe configurarse un plugin de caché aparte
+# Ver https://docs.ansible.com/ansible/latest/plugins/cache.html
+cache: true
