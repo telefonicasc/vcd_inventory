@@ -160,6 +160,7 @@ try:
     from pyvcloud.vcd.vm import VM
     from pyvcloud.vcd.metadata import Metadata
     from pyvcloud.vcd.gateway import Gateway
+    from pyvcloud.vcd.exceptions import AccessForbiddenException
     import urllib3
     HAS_PYVCLOUD = True
 except ImportError:
@@ -264,7 +265,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                 fullname = "{}_{}".format(vm.vapp_name, vm.vm)
 
             # Group relationships, from comma-separated metadata
-            glist = (x.strip() for x in vm.groups.split(','))
+            glist = (x.strip() for x in (vm.groups or "").split(','))
             glist = tuple(x for x in glist if x != "")
             for parent, child in zip(('all', ) + glist, glist):
                 groups[parent][child] = None
@@ -440,11 +441,14 @@ class VMWrapper:
             return self
 
         metadata = Metadata(client, resource=vm.get_metadata())
-        value = metadata.get_metadata_value('ansible_host_groups')
         try:
+            value = metadata.get_metadata_value('ansible_host_groups')
             groups = value.TypedValue.Value.text.strip()
         except AttributeError:
             # no metadata for this host
+            groups = None
+        except AccessForbiddenException:
+            # Couldn't read metadata! or not present
             groups = None
         self.nics = vm.list_nics()
         self.groups = groups
