@@ -49,6 +49,27 @@ threads: 16
 # True to replace dashes ('-') in group names with underscores ('_')
 replace_dash: false
 
+# Metadata property that contains the ansible host group.
+# This property contains the sequence of ansible groups to
+# which the VMs belong.
+#
+# consecutive groups are nested, i.e. if the VM's metadata
+# is set to "pre3, pre3-iot, pre3-iot-hadoop, pre3-iot-hadoop-ab",
+# then the ansible inventory will have this structure:
+#
+# pre3:
+#   pre3-iot:
+#     pre3-iot-hadoop:
+#       pre3-iot-hadoop-ab:
+#         - "instance-name-01"
+#         - "instance-name-02"
+#         ... etc
+ansible_meta: ansible_host_groups
+
+# Guest property that contains the ansible host groups.
+# Just like ansible_meta, but avoids Takes priority over ansible_meta.
+ansible_property: ansible_host_groups
+
 # El módulo soporta cache. Debe configurarse un plugin de caché aparte
 # Ver https://docs.ansible.com/ansible/latest/plugins/cache.html
 cache: true

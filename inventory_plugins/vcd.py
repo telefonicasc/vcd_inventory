@@ -98,6 +98,21 @@ options:
     default: False
     env:
       - name: VCLOUD_ONLY_ON
+  ansible_property:
+    description:
+    - Name of the guest_property used to store ansible group metadata.
+    - This value takes precedence over ansible_meta.
+    type: string
+    default: ansible_host_groups
+    env:
+      - name: VCLOUD_ANSIBLE_PROPERTY
+  ansible_meta:
+    description:
+    - Name of the metadata field used to store ansible group metadata.
+    type: string
+    default: ansible_host_groups
+    env:
+      - name: VCLOUD_ANSIBLE_META
   check_dnat:
     description: True to scan edge routers for DNATs to port 22 of VMs
     type: bool
@@ -139,6 +154,8 @@ log_file: "pyvcloud.log"
 check_dnat: true
 threads: 16
 replace_dash: false
+ansible_meta: ansible_host_groups
+ansible_property: ansible_host_groups
 '''
 
 # pylint: disable=wrong-import-position
@@ -154,6 +171,7 @@ try:
     from pyvcloud.vcd.client import BasicLoginCredentials
     from pyvcloud.vcd.client import Client
     from pyvcloud.vcd.client import EntityType
+    from pyvcloud.vcd.client import NSMAP
     from pyvcloud.vcd.org import Org
     from pyvcloud.vcd.vdc import VDC
     from pyvcloud.vcd.vapp import VApp
@@ -321,9 +339,14 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                 VMWrapper(vapp_name, resource, vapp_rules, edge_rules)
                 for resource in vapp.get_all_vms())
 
-        def _get_vm_info(vm_item, only_on=self.get_option('only_on')):
+        def _get_vm_info(
+                vm_item,
+                only_on=self.get_option('only_on'),
+                ansible_property=self.get_option('ansible_property').strip() or None,
+                ansible_meta=self.get_option('ansible_meta').strip() or None):
             ''' Trigger query for VM metadata '''
-            return vm_item.get_metadata(client, only_on)
+            return vm_item.get_metadata(client, only_on, ansible_property,
+                                        ansible_meta)
 
         vapp_names = [
             resource.get('name')
@@ -333,7 +356,8 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         # This doesn't work, getting vapp VMs does not seem to be concurrent
         #vm_items = tuple(chain(*pool.map(_get_vapp_vms, vapp_names)))
         vm_items = tuple(chain(*map(_get_vapp_vms, vapp_names)))
-        return pool.map(_get_vm_info, vm_items)
+        return tuple(vm for vm in pool.map(_get_vm_info, vm_items)
+                     if vm is not None)
 
 
 #pylint: disable=too-few-public-methods
@@ -432,17 +456,59 @@ class VMWrapper:
         self.nics = None
         self.groups = None
 
-    def get_metadata(self, client, only_on):
+    @staticmethod
+    def element(resource, namespace, prop):
+        ''' Get a namespaced property from an XML resource '''
+        attrib = '{' + NSMAP[namespace] + '}' + prop
+        if hasattr(resource, attrib):
+            return resource[attrib]
+        return None
+
+    @staticmethod
+    def attribute(resource, namespace, attr):
+        ''' Get a namespaced attribute from an XML resource '''
+        return resource.get('{' + NSMAP[namespace] + '}' + attr,
+                            "").strip() or None
+
+    @staticmethod
+    def subelements(resource, namespace, *path):
+        ''' Get a namespaced list of properties from an XML resource '''
+        prefix = '{' + NSMAP[namespace] + '}'
+        for item in path:
+            attrib = prefix + item
+            if not hasattr(resource, attrib):
+                return tuple()
+            resource = resource[attrib]
+        return resource
+
+    def get_metadata(self, client, only_on, ansible_property, ansible_meta):
         ''' Get addresses, nats and metadata for the VM '''
 
         #pylint: disable=invalid-name
         vm = VM(client, resource=self.resource)
         if only_on and not vm.is_powered_on():
+            return None
+
+        self.nics = vm.list_nics()
+        self.groups = None
+
+        if ansible_property is not None:
+            for prop in VMWrapper.subelements(vm.get_resource(), 'ovf',
+                                              'ProductSection', 'Property'):
+                label = VMWrapper.element(prop, 'ovf', 'Label')
+                value = VMWrapper.element(prop, 'ovf', 'Value')
+                if label is not None and value is not None:
+                    value_text = VMWrapper.attribute(value, "ovf", "value")
+                    if label.text == ansible_property and value_text is not None:
+                        self.groups = value_text
+                        break
+
+        if self.groups is not None or ansible_meta is None:
             return self
 
         metadata = Metadata(client, resource=vm.get_metadata())
         try:
-            value = metadata.get_metadata_value('ansible_host_groups')
+            value = metadata.get_metadata_value(ansible_meta)
             groups = value.TypedValue.Value.text.strip()
         except AttributeError:
             # no metadata for this host
@@ -450,8 +516,10 @@ class VMWrapper:
         except AccessForbiddenException:
             # Couldn't read metadata! or not present
             groups = None
-        self.nics = vm.list_nics()
-        self.groups = groups
+
+        if groups is not None and groups != "":
+            self.groups = groups
+
         return self
 
     def get_address(self, nic):
