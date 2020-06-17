@@ -278,9 +278,10 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             vms = self.get_vms(pool)
 
         for vm in vms:
-            fullname = vm.vm
+            fullname, vappname = vm.vm, vm.vapp_name
             if compose_names:
                 fullname = "{}_{}".format(vm.vapp_name, vm.vm)
+            attribs[fullname] = {'vcd_vapp_name': vappname}
 
             # Group relationships, from comma-separated metadata
             glist = (x.strip() for x in (vm.groups or "").split(','))
@@ -293,8 +294,8 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             if ip is None or ip == "":
                 continue
 
-            # If we found IP address info for this host, save it
-            attribs[fullname] = {'ansible_host': ip, 'ansible_port': port}
+            # If we found IP address info for this host, save it 
+            attribs[fullname].update({'ansible_host': ip, 'ansible_port': port})
             lastg = glist[-1] if len(glist) > 0 else 'all'
             hosts[lastg].append(fullname)
 
