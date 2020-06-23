@@ -24,6 +24,8 @@
 ''' vCloud Director Inventory Source '''
 
 from __future__ import (absolute_import, division, print_function)
+import logging
+
 #pylint: disable=invalid-name
 __metaclass__ = type
 
@@ -334,7 +336,11 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
 
         def _get_vapp_vms(vapp_name):
             ''' Enumerate all VMs in vApp '''
-            vapp = VApp(client, resource=vdc.get_vapp(vapp_name))
+            try:
+                vapp = VApp(client, resource=vdc.get_vapp(vapp_name))
+            except:
+                logging.waring("Failed to get information for vApp %s, skipping" % vapp_name)
+                return tuple()
             vapp_rules = VAppRules(vapp)
             return tuple(
                 VMWrapper(vapp_name, resource, vapp_rules, edge_rules)
@@ -490,7 +496,12 @@ class VMWrapper:
         if only_on and not vm.is_powered_on():
             return None
 
-        self.nics = vm.list_nics()
+        try:
+            self.nics = vm.list_nics()
+        except:
+            # The VM may not have NICs, and that causes an error in pyvcloud
+            logging.warning("Failed to get NICs for VM %s in vApp %s", self.vm, self.vapp_name)
+            self.nics = tuple()
         self.groups = None
 
         if ansible_property is not None:
