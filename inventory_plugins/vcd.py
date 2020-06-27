@@ -24,7 +24,6 @@
 ''' vCloud Director Inventory Source '''
 
 from __future__ import (absolute_import, division, print_function)
-import logging
 
 #pylint: disable=invalid-name
 __metaclass__ = type
@@ -95,11 +94,17 @@ options:
     env:
       - name: VCLOUD_LOG_FILE
   only_on:
-    description: Only return VMs that are on
+    description: Only return VMs that are on.
     type: bool
     default: False
     env:
       - name: VCLOUD_ONLY_ON
+  only_prefix:
+    description: Only read vApps starting with this prefix.
+    type: string
+    default: ""
+    env:
+      - name: VCLOUD_ONLY_PREFIX
   ansible_property:
     description:
     - Name of the guest_property used to store ansible group metadata.
@@ -280,9 +285,9 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             vms = self.get_vms(pool)
 
         for vm in vms:
-            fullname, vappname = vm.vm, vm.vapp_name
+            fullname, vappname = vm.inventory_name, vm.vapp_name
             if compose_names:
-                fullname = "{}_{}".format(vm.vapp_name, vm.vm)
+                fullname = "{}_{}".format(vm.vapp_name, vm.inventory_name)
             attribs[fullname] = {'vcd_vapp_name': vappname}
 
             # Group relationships, from comma-separated metadata
@@ -296,8 +301,11 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             if ip is None or ip == "":
                 continue
 
-            # If we found IP address info for this host, save it 
-            attribs[fullname].update({'ansible_host': ip, 'ansible_port': port})
+            # If we found IP address info for this host, save it
+            attribs[fullname].update({
+                'ansible_host': ip,
+                'ansible_port': port
+            })
             lastg = glist[-1] if len(glist) > 0 else 'all'
             hosts[lastg].append(fullname)
 
@@ -334,22 +342,25 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         edge_rules = EdgeRules(pool, client,
                                vdc) if self.get_option('check_dnat') else None
 
-        def _get_vapp_vms(vapp_name):
+        def _get_vapp_vms(vapp_name,
+                          only_prefix=self.get_option('only_prefix')):
             ''' Enumerate all VMs in vApp '''
             try:
                 vapp = VApp(client, resource=vdc.get_vapp(vapp_name))
             except:
-                logging.waring("Failed to get information for vApp %s, skipping" % vapp_name)
+                print("Failed to get information for vApp %s, skipping" %
+                      vapp_name)
                 return tuple()
             vapp_rules = VAppRules(vapp)
             return tuple(
-                VMWrapper(vapp_name, resource, vapp_rules, edge_rules)
-                for resource in vapp.get_all_vms())
+                VMWrapper(vapp_name, resource, only_prefix, vapp_rules,
+                          edge_rules) for resource in vapp.get_all_vms())
 
         def _get_vm_info(
                 vm_item,
                 only_on=self.get_option('only_on'),
-                ansible_property=self.get_option('ansible_property').strip() or None,
+                ansible_property=self.get_option('ansible_property').strip()
+            or None,
                 ansible_meta=self.get_option('ansible_meta').strip() or None):
             ''' Trigger query for VM metadata '''
             return vm_item.get_metadata(client, only_on, ansible_property,
@@ -359,6 +370,14 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             resource.get('name')
             for resource in vdc.list_resources(EntityType.VAPP)
         ]
+
+        # If we get a prefix, filter the vapp list
+        only_prefix = self.get_option('only_prefix')
+        if only_prefix:
+            vapp_names = [
+                vapp_name for vapp_name in vapp_names
+                if vapp_name.startswith(only_prefix)
+            ]
 
         # This doesn't work, getting vapp VMs does not seem to be concurrent
         #vm_items = tuple(chain(*pool.map(_get_vapp_vms, vapp_names)))
@@ -452,12 +471,21 @@ class VAppRules:
 
 class VMWrapper:
     ''' Wraps pyvcloud VM with some accesory methods '''
-    def __init__(self, vapp_name, vm_resource, vapp_rules, edge_rules):
+    def __init__(self, vapp_name, vm_resource, only_prefix, vapp_rules,
+                 edge_rules):
         ''' Attach VM resource and NAT mappings from vApp and edges '''
         self.resource = vm_resource
         self.vapp_name = vapp_name
         #pylint: disable=invalid-name
         self.vm = vm_resource.get('name')
+        # inventory_name es el nombre de la máquina sin prefijo!
+        self.inventory_name = self.vm
+        if only_prefix and self.vm.startswith(only_prefix):
+            inventory_name = self.vm[len(only_prefix):]
+            if inventory_name.startswith("-") or inventory_name.startswith(
+                    "_"):
+                inventory_name = inventory_name[1:]
+            self.inventory_name = inventory_name
         self.vapp_nat = vapp_rules
         self.edge_nat = edge_rules
         self.nics = None
@@ -500,7 +528,8 @@ class VMWrapper:
             self.nics = vm.list_nics()
         except:
             # The VM may not have NICs, and that causes an error in pyvcloud
-            logging.warning("Failed to get NICs for VM %s in vApp %s", self.vm, self.vapp_name)
+            print("Failed to get NICs for VM %s in vApp %s" %
+                  (self.vm, self.vapp_name))
             self.nics = tuple()
         self.groups = None
 

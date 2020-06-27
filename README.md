@@ -36,6 +36,9 @@ log_file: pyvcloud.log
 # True if the inventory should return only powered-on VMs
 only_on: false
 
+# Match only vApps starting with this prefix
+only_prefix: ""
+
 # True to check DNAT rules at edges for mappings of port SSH 22
 check_dnat: true
 
