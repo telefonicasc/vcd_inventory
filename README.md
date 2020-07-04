@@ -69,8 +69,19 @@ replace_dash: false
 #         ... etc
 ansible_meta: ansible_host_groups
 
+# Metadata property that contains the ansible host vars.
+# This property contains a sequence of key=value pairs,
+# "key1=value1, key2=value2, ..."
+#
+# Each key is assigned as a host var to the proper host.
+ansible_meta_vars: ansible_host_vars
+
 # Guest property that contains the ansible host groups.
-# Just like ansible_meta, but avoids Takes priority over ansible_meta.
+# Just like ansible_meta, but looks for the value in
+# guest properties instead of metadata.
+# 
+# If the group list is found both in metadata and guest
+# properties, the guest properties take precedence.
 ansible_property: ansible_host_groups
 
 # El módulo soporta cache. Debe configurarse un plugin de caché aparte

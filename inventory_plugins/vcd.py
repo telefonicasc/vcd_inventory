@@ -120,6 +120,13 @@ options:
     default: ansible_host_groups
     env:
       - name: VCLOUD_ANSIBLE_META
+  ansible_meta_vars:
+    description:
+    - Name of the metadata field used to store ansible host vars.
+    type: string
+    default: ansible_host_vars
+    env:
+      - name: VCLOUD_ANSIBLE_META_VARS
   check_dnat:
     description: True to scan edge routers for DNATs to port 22 of VMs
     type: bool
@@ -162,6 +169,7 @@ check_dnat: true
 threads: 16
 replace_dash: false
 ansible_meta: ansible_host_groups
+ansible_meta_vars: ansible_host_vars
 ansible_property: ansible_host_groups
 '''
 
@@ -310,6 +318,13 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                 'vcd_nic_ips': tuple(pair[0] for pair in nic_ips),
             })
 
+            # If there are hostvars, append them.
+            for kv in (vm.hostvars or "").split(","):
+                parts = kv.split("=", 1)
+                if len(parts) == 2:
+                    k, v = parts
+                    attribs[fullname][k.strip()] = v.strip()
+
             # Add the host to the last group in list
             lastg = glist[-1] if len(glist) > 0 else 'all'
             hosts[lastg].append(fullname)
@@ -364,12 +379,12 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         def _get_vm_info(
                 vm_item,
                 only_on=self.get_option('only_on'),
-                ansible_property=self.get_option('ansible_property').strip()
-            or None,
-                ansible_meta=self.get_option('ansible_meta').strip() or None):
+                ansible_property=self.get_option('ansible_property').strip() or None,
+                ansible_meta=self.get_option('ansible_meta').strip() or None,
+                ansible_meta_vars=self.get_option('ansible_meta_vars').strip() or None):
             ''' Trigger query for VM metadata '''
             return vm_item.get_metadata(client, only_on, ansible_property,
-                                        ansible_meta)
+                                        ansible_meta, ansible_meta_vars)
 
         vapp_names = [
             resource.get('name')
@@ -495,6 +510,7 @@ class VMWrapper:
         self.edge_nat = edge_rules
         self.nics = None
         self.groups = None
+        self.hostvars = None
 
     @staticmethod
     def element(resource, namespace, prop):
@@ -521,7 +537,7 @@ class VMWrapper:
             resource = resource[attrib]
         return resource
 
-    def get_metadata(self, client, only_on, ansible_property, ansible_meta):
+    def get_metadata(self, client, only_on, ansible_property, ansible_meta, ansible_meta_vars):
         ''' Get addresses, nats and metadata for the VM '''
 
         #pylint: disable=invalid-name
@@ -553,18 +569,25 @@ class VMWrapper:
             return self
 
         metadata = Metadata(client, resource=vm.get_metadata())
-        try:
-            value = metadata.get_metadata_value(ansible_meta)
-            groups = value.TypedValue.Value.text.strip()
-        except AttributeError:
-            # no metadata for this host
-            groups = None
-        except AccessForbiddenException:
-            # Couldn't read metadata! or not present
-            groups = None
+        def get_meta(name):
+            try:
+                value = metadata.get_metadata_value(name)
+                clean = value.TypedValue.Value.text.strip()
+            except AttributeError:
+                # no metadata for this host
+                clean = None
+            except AccessForbiddenException:
+                # Couldn't read metadata! or not present
+                clean = None
+            return clean
 
+        groups = get_meta(ansible_meta)
         if groups is not None and groups != "":
             self.groups = groups
+
+        hostvars = get_meta(ansible_meta_vars)
+        if hostvars is not None and hostvars != "":
+            self.hostvars = hostvars
 
         return self
 
