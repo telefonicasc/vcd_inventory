@@ -300,12 +300,17 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             ip, port = vm.get_address(self.get_option('mgmt_nic'))
             if ip is None or ip == "":
                 continue
-
+          
             # If we found IP address info for this host, save it
+            nic_ips = vm.get_nics()
             attribs[fullname].update({
                 'ansible_host': ip,
-                'ansible_port': port
+                'ansible_port': port,
+                'vcd_nic_fenced_ips': tuple(pair[1] for pair in nic_ips),
+                'vcd_nic_ips': tuple(pair[0] for pair in nic_ips),
             })
+
+            # Add the host to the last group in list
             lastg = glist[-1] if len(glist) > 0 else 'all'
             hosts[lastg].append(fullname)
 
@@ -601,3 +606,20 @@ class VMWrapper:
         # We only reach here if there is no NAT at all
 
         return (ip, 22)
+
+    def get_nics(self):
+        """ Return internal and fenced IP addresses for each NIC of the VM """
+        result = []
+
+        for nic_idx, nic_info in enumerate(self.nics):
+            ip = nic_info.get('ip_address', None)
+            fenced_ip = ip
+
+            if ip is not None:
+                local_nat = self.vapp_nat.lookup(self.vm, nic_idx)
+                if local_nat is not None:
+                    fenced_ip = local_nat[0]
+
+            result.append((ip, fenced_ip))
+
+        return result
