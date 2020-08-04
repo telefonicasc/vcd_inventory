@@ -434,11 +434,11 @@ class EdgeRules:
             EdgeRules.Rule(
                 rule.originalAddress.text,
                 int(rule.originalPort.text)
-                    if all(x.isDigit() for x in rule.originalPort.text)
+                    if all(x.isdigit() for x in rule.originalPort.text)
                     else rule.originalPort.text,
                 rule.translatedAddress.text,
                 int(rule.translatedPort.text)
-                    if all(x.isDigit() for x in rule.translatedPort.text)
+                    if all(x.isdigit() for x in rule.translatedPort.text)
                     else rule.translatedPort.text
             ) for rule in nat_rules_resource.natRules.natRule
             if rule.protocol == 'tcp' and rule.action == 'dnat')
