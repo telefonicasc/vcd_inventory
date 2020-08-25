@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright 2019 Telefónica Soluciones de Informática y Comunicaciones de España, S.A.U.
 # PROJECT: VCD Inventory
 #
