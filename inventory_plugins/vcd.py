@@ -473,6 +473,10 @@ class VAppRules:
             if nat_service.NatType.text != "ipTranslation":
                 continue
 
+            # Make sure there are translation rules
+            if not hasattr(nat_service, 'NatRule'):
+                continue
+
             for nat_rule in nat_service.NatRule:
                 if not hasattr(nat_rule, "OneToOneVmRule"):
                     continue
@@ -484,6 +488,9 @@ class VAppRules:
 
         # Convert the local VM ids to VM names
         self.mapping = dict()
+        if not hasattr(resource, 'Children') or not hasattr(resource.Children, 'Vm'):
+            return
+
         for child in resource.Children.Vm:
             name = child.get('name')
             vmid = child.VAppScopedLocalId.text
