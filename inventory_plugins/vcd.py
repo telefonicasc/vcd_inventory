@@ -313,10 +313,17 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             # If we found IP address info for this host, save it
             nic_ips = vm.get_nics()
             attribs[fullname].update({
-                'ansible_host': ip,
-                'ansible_port': port,
+                'ansible_host':       ip,
+                'ansible_port':       port,
                 'vcd_nic_fenced_ips': tuple(pair[1] for pair in nic_ips),
-                'vcd_nic_ips': tuple(pair[0] for pair in nic_ips),
+                'vcd_nic_ips':        tuple(pair[0] for pair in nic_ips),
+                'vcd_nic_macs':       tuple(pair[2] for pair in nic_ips),
+                'vcd_primary_nic':    'eth{}'.format(vm.primary_nic),
+                # Map eth address to interface name
+                'vcd_nic_ifnames': {
+                    pair[2]: 'eth{}'.format(index)
+                    for index, pair in enumerate(nic_ips)
+                },
             })
 
             # If there are hostvars, append them.
@@ -521,6 +528,7 @@ class VMWrapper:
         self.vapp_nat = vapp_rules
         self.edge_nat = edge_rules
         self.nics = None
+        self.primary_nic = 0
         self.groups = None
         self.hostvars = None
 
@@ -647,14 +655,20 @@ class VMWrapper:
         result = []
 
         for nic_idx, nic_info in enumerate(self.nics):
+            mac = nic_info.get('mac_address', None)
             ip = nic_info.get('ip_address', None)
+            primary = nic_info.get('primary', False)
             fenced_ip = ip
+
+            # Register which is the primary NIC.
+            if primary:
+                self.primary_nic = nic_idx
 
             if ip is not None:
                 local_nat = self.vapp_nat.lookup(self.vm, nic_idx)
                 if local_nat is not None:
                     fenced_ip = local_nat[0]
 
-            result.append((ip, fenced_ip))
+            result.append((ip, fenced_ip, mac))
 
         return result
