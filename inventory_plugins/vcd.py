@@ -279,7 +279,9 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                 inventory.add_host(fullname)
                 for key, val in attribs[fullname].items():
                     inventory.set_variable(fullname, key, val)
-                inventory.add_child(group, fullname)
+                # Beware when group name matches host name...
+                if group != fullname:
+                    inventory.add_child(group, fullname)
 
     def get_inventory(self):
         ''' Get full inventory from vCD '''
