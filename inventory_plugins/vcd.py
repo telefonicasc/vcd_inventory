@@ -568,7 +568,11 @@ class VMWrapper:
             return None
 
         try:
-            self.nics = vm.list_nics()
+            # Beware! vm_list_nics DOES NOT return the NICs in index order,
+            # but actually it may return them REVERSED.
+            # We sort the nics by index before storing them in self.nics.
+            nics = {int(nic_info['index']): nic_info for nic_info in vm.list_nics()}
+            self.nics = tuple(nics[index] for index in range(0, len(nics)))
         except:
             # The VM may not have NICs, and that causes an error in pyvcloud
             print("Failed to get NICs for VM %s in vApp %s" %
